@@ -44,8 +44,8 @@ fun App() {
         //wait for countriesCodes to be fetched
     }
     CoroutineScope(Dispatchers.Default).launch {
-//        geographyApp.makeQuestion()
-//             questionText = geographyApp.currentQuestion.text
+        geographyApp.makeQuestion()
+             questionText = geographyApp.currentQuestion.text
     }
     Text(text = questionText)
 }
