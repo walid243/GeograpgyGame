@@ -5,5 +5,6 @@ class Question(
     val answer : String,
     val answered : Boolean,
     val correct : Boolean,
-    val options : List<String>
+    val options : List<String>,
+    val type: QuestionType
 )
