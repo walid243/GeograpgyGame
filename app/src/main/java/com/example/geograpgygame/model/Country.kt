@@ -6,7 +6,7 @@ class Country(
     val ccn3: String,
     val capital: List<String>,
     val region: String,
-    val area: Int,
+    val area: Double,
     val flag: String,
     val population: Int,
 
