@@ -10,14 +10,16 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.net.URL
 
-class GeographyApp {
+object GeographyApp {
     var countriesCodes: List<String> = mutableListOf()
     val questionsMade = mutableListOf<Question>()
-    lateinit var currentQuestion: Question
+    var currentQuestion: Question? = null
 
     init {
         CoroutineScope(Dispatchers.Default).launch {
-            countriesCodes = getCountriesCodes()
+            do {
+                countriesCodes = getCountriesCodes()
+            } while (countriesCodes.isEmpty())
         }
     }
 
@@ -35,7 +37,7 @@ class GeographyApp {
             }
     }
 
-    fun getCoutry(ccn3: String): Deferred<Country> {
+    private fun getCountryAsync(ccn3: String): Deferred<Country?> {
         val url = "https://restcountries.com/v3.1/"
         //fetch data from url
         return CoroutineScope(Dispatchers.Default).async {
@@ -44,89 +46,86 @@ class GeographyApp {
                 .addConverterFactory(GsonConverterFactory.create())
                 .build()
                 .create(RestCountriesApi::class.java)
-                .getCountry(ccn3).let { response ->
-                    println(response)
-                    response.body()!![0]
-
-                }
+                .getCountry(ccn3)
+                .body()?.get(0)
         }
     }
 
-    suspend fun makeQuestion(): Question {
+    suspend fun makeQuestion() {
         var question: Question
+        var questionType: QuestionType
         do {
-            question = getQuestion()
+            questionType = QuestionType.values().random()
+            question = getQuestion(questionType)
         } while (questionsMade.contains(question))
         currentQuestion = question
-        return currentQuestion
+        println(currentQuestion)
     }
 
-    private suspend fun getQuestion(): Question {
-        val country = getCoutry(countriesCodes.random()).await()
-        val questionType = QuestionType.values().random()
-        val question = when (questionType) {
-            QuestionType.CAPITAL -> {
-                val options = mutableListOf<String>()
-                options.add(country.capital[0])
-                while (options.size < 4) {
-                    val option = getCoutry(countriesCodes.random()).await().capital[0]
-                    if (!options.contains(option)) {
-                        options.add(getRandomPosition(options.size), option)
-                    }
-                }
-                Question(
-                    text = "What is the capital of ${country.name.common}?",
-                    answer = country.capital[0],
-                    answered = false,
-                    correct = false,
-                    options = options,
-                    type = questionType
-                )
-            }
-            QuestionType.FLAG -> {
-                val options = mutableListOf<String>()
-                options.add(country.flag)
-                while (options.size < 4) {
-                    val option = getCoutry(countriesCodes.random()).await().flag
-                    if (!options.contains(option)) {
-                        options.add(getRandomPosition(options.size), option)
-                    }
-                }
-                Question(
-                    text = "What is the flag of ${country.name.common}?",
-                    answer = country.flag,
-                    answered = false,
-                    correct = false,
-                    options = options,
-                    type = questionType
-                )
-            }
-            QuestionType.POPULATION -> {
-                val options = mutableListOf<String>()
-                options.add(country.population.toString())
-                while (options.size < 4) {
-                    val option = getCoutry(countriesCodes.random()).await().population.toString()
-                    if (!options.contains(option)) {
-                        options.add(option)
-                    }
-                }
-                Question(
-                    text = "What is the population of ${country.name.common}?",
-                    answer = country.population.toString(),
-                    answered = false,
-                    correct = false,
-                    options = options,
-                    type = questionType
-                )
-            }
-        }
-        questionsMade.add(question)
-        return question
+    private suspend fun getQuestion(type: QuestionType): Question {
+        val typeOptionsMap = mapOf(
+            QuestionType.CAPITAL to { country: Country -> country.capital[0] },
+            QuestionType.FLAG to { country: Country -> country.flag },
+            QuestionType.POPULATION to { country: Country -> country.population.toString() }
+        )
+        val typeTextMap = mapOf(
+            QuestionType.CAPITAL to { country: Country -> "What is the capital of ${country.name.common}?" },
+            QuestionType.FLAG to { country: Country -> "What is the flag of ${country.name.common}?" },
+            QuestionType.POPULATION to { country: Country -> "What is the population of ${country.name.common}?" }
+        )
+        var country: Country?
+        do {
+            country = getCountryAsync(countriesCodes.random()).await()
+        } while (country == null)
+        return Question(
+            text = typeTextMap[type]!!.invoke(country),
+            answer = typeOptionsMap[type]!!.invoke(country),
+            answered = false,
+            correct = false,
+            options = getOptions(
+                type, typeOptionsMap,
+                typeOptionsMap[type]!!.invoke(country)
+            ),
+            type = type
+        )
     }
 
     private fun getRandomPosition(size: Int): Int {
         return (0..size).random()
     }
 
+    private suspend fun getOptions(
+        questionType: QuestionType,
+        typeOptionsMap: Map<QuestionType, (Country) -> String>,
+        answer: String
+    ): List<String> {
+
+        val options = mutableListOf<String>()
+        var country: Country?
+        var option = ""
+        options.add(answer)
+        while (options.size < 4) {
+            do {
+                country = getCountryAsync(countriesCodes.random()).await()
+
+            } while (country == null)
+            option = typeOptionsMap[questionType]!!.invoke(country)
+            if (!options.contains(option)) {
+                options.add(getRandomPosition(options.size), option)
+            }
+        }
+        return options
+    }
+
+    fun getCorrectQuestionsCount(): Int {
+        return questionsMade.filter { it.correct }.size
+    }
+
+    fun checkAnswer(): Boolean {
+        currentQuestion!!.answered = true
+        currentQuestion!!.correct = currentQuestion!!.answer == currentQuestion!!.options[0]
+        questionsMade.add(currentQuestion!!)
+        return currentQuestion!!.correct
+    }
 
 }
