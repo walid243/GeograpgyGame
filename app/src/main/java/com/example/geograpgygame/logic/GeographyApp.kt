@@ -15,12 +15,8 @@ object GeographyApp {
     val questionsMade = mutableListOf<Question>()
     var currentQuestion: Question? = null
 
-    init {
-        CoroutineScope(Dispatchers.Default).launch {
-            do {
-                countriesCodes = getCountriesCodes()
-            } while (countriesCodes.isEmpty())
-        }
+    fun loadCountryCodes() {
+        countriesCodes = getCountriesCodes()
     }
 
 
@@ -64,7 +60,7 @@ object GeographyApp {
 
     private suspend fun getQuestion(type: QuestionType): Question {
         val typeOptionsMap = mapOf(
-            QuestionType.CAPITAL to { country: Country -> country.capital[0] },
+            QuestionType.CAPITAL to { country: Country -> country.capital?.get(0) ?: "No capital" },
             QuestionType.FLAG to { country: Country -> country.flag },
             QuestionType.POPULATION to { country: Country -> country.population.toString() }
         )
@@ -109,6 +105,7 @@ object GeographyApp {
                 country = getCountryAsync(countriesCodes.random()).await()
 
             } while (country == null)
+            println(country)
             option = typeOptionsMap[questionType]!!.invoke(country)
             if (!options.contains(option)) {
                 options.add(getRandomPosition(options.size), option)
@@ -121,11 +118,9 @@ object GeographyApp {
         return questionsMade.filter { it.correct }.size
     }
 
-    fun checkAnswer(): Boolean {
-        currentQuestion!!.answered = true
-        currentQuestion!!.correct = currentQuestion!!.answer == currentQuestion!!.options[0]
-        questionsMade.add(currentQuestion!!)
-        return currentQuestion!!.correct
+    fun checkAnswer(selectedOption: Int):Boolean {
+            return currentQuestion!!.answer == currentQuestion!!.options[selectedOption]
     }
+
 
 }
