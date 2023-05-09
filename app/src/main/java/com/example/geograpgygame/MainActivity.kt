@@ -26,9 +26,12 @@ import com.example.geograpgygame.logic.GeographyApp
 import com.example.geograpgygame.ui.theme.GeograpgyGameTheme
 import kotlinx.coroutines.*
 
+
 class MainActivity : ComponentActivity() {
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         setContent {
             GeograpgyGameTheme {
                 // A surface container using the 'background' color from the theme
@@ -46,25 +49,26 @@ class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalFoundationApi::class)
     @Composable
     fun App() {
-        println("Se lanza la pregunta <-------------")
         var currentQuestion by remember { mutableStateOf(GeographyApp.currentQuestion) }
         var questionText by remember { mutableStateOf("Waiting for question... ") }
         var options by remember { mutableStateOf(listOf<String>()) }
         var selectedOption by remember { mutableStateOf(-1) }
-        var correctAnswers = GeographyApp.getCorrectQuestionsCount()
-        LaunchedEffect(Unit){
+        var correctAnswers by remember { mutableStateOf(GeographyApp.getCorrectQuestionsCount()) }
+        var job: Job? by remember { mutableStateOf(null) }
+        LaunchedEffect(Unit) {
             withContext(Dispatchers.IO) {
-                GeographyApp.loadCountryCodes()
-                GeographyApp.makeQuestion()
-                if (GeographyApp.currentQuestion != null) {
-                    currentQuestion = GeographyApp.currentQuestion
-                    questionText = currentQuestion!!.text
-                    options = currentQuestion!!.options
+                GeographyApp.makeQuestions()
+                job = CoroutineScope(Dispatchers.Default).launch {
+                    GeographyApp.setCurrentQuestion()
+                    if (GeographyApp.currentQuestion != null) {
+                        currentQuestion = GeographyApp.currentQuestion
+                        questionText = currentQuestion!!.text
+                        options = currentQuestion!!.options
+                    }
                 }
             }
+
         }
-
-
 
         Column(
             modifier = Modifier.fillMaxSize(),
@@ -80,20 +84,24 @@ class MainActivity : ComponentActivity() {
                     items(options.size) { index ->
                         Button(
                             onClick = {
-                                if (!currentQuestion!!.answered){
-                                selectedOption = index
+                                if (!currentQuestion!!.answered) {
+                                    selectedOption = index
 
-                                currentQuestion = GeographyApp.currentQuestion
-                                val newQuestion = currentQuestion!!.copy(answered = true, correct = checkAnswer(selectedOption))
-                                GeographyApp.questionsMade.add(GeographyApp.currentQuestion!!)
-                                currentQuestion = newQuestion
-                                    if (currentQuestion!!.correct) correctAnswers += 1
+                                    currentQuestion = GeographyApp.currentQuestion
+                                    val newQuestion = currentQuestion!!.copy(
+                                        answered = true,
+                                        correct = checkAnswer(selectedOption)
+                                    )
+                                    currentQuestion = newQuestion
+                                    GeographyApp.currentQuestion = newQuestion
+                                    GeographyApp.saveQuestion()
+                                    correctAnswers = GeographyApp.getCorrectQuestionsCount()
                                 }
                             },
                             modifier = Modifier.padding(16.dp),
                             colors = ButtonDefaults.let {
                                 println(currentQuestion!!.answered)
-                                if (currentQuestion!!.answered ) {
+                                if (currentQuestion!!.answered) {
                                     if (currentQuestion!!.options[index] == currentQuestion!!.answer) {
                                         it.buttonColors(backgroundColor = Color.Green)
                                     } else {
@@ -119,14 +127,16 @@ class MainActivity : ComponentActivity() {
             }
             Row() {
                 Button(onClick = {
-                    CoroutineScope(Dispatchers.Default).launch {
-                        GeographyApp.makeQuestion()
+                    job?.cancel()
+                    job = CoroutineScope(Dispatchers.Default).launch {
+                        GeographyApp.setCurrentQuestion()
                         if (GeographyApp.currentQuestion != null) {
                             currentQuestion = GeographyApp.currentQuestion
                             questionText = currentQuestion!!.text
                             options = currentQuestion!!.options
                         }
-                    } }) {
+                    }
+                }) {
                     Text(text = "Next Question")
                 }
             }
